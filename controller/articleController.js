@@ -1,71 +1,114 @@
-const articles = [
-    {id:1, title:'Welcome to the blog ', author :'Admin'},
-    {id:2, title:'My first Express server ', author :'Aya'},
-    {id:3, title:'Testing an API with Postman', author :'Aya'}
-];
-let nextId = 4;
+const Article = require('../models/articleModel');
+const User = require('../models/userModel');
 
-const getAllarticles = (req, res) => {
-    const {author} = req.query;
-    let result = articles;
-    if (author){
-        result = articles.filter((article) => article.author === author);
+// 1. Retrieve all articles populated with author information
+const getAllArticles = async (req, res) => {
+    try {
+        const articles = await Article.find().populate('author', 'name email');
+
+        res.status(200).json(articles);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
-    res.json({total: result.length, articles: result});
-}
+};
 
-const getArticleById = (req, res) => {
-    const {id} = req.params;
-    const article = articles.find((article) => article.id === parseInt(id));
+// 2. Create a new article linked to an author
+const createArticle = async (req, res) => {
+    try {
+        const { title, content, authorId } = req.body;
 
-    if (article){
-        res.json(article);
+        if (!title || !content || !authorId) {
+            return res.status(400).json({
+                message: 'title, content, and authorId are required'
+            });
+        }
+
+        // Verify that the author exists in the 'users' collection
+        const author = await User.findById(authorId);
+
+        if (!author) {
+            return res.status(404).json({
+                message: 'Author not found (invalid authorId)'
+            });
+        }
+
+        const newArticle = await Article.create({
+            title,
+            content,
+            author: authorId
+        });
+
+        const populatedArticle = await newArticle.populate('author', 'name email');
+
+        res.status(201).json(populatedArticle);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
-    else{
-        res.status(404).json({message:`Article with id ${id} not found`});
+};
+
+// 3. Retrieve a single article by ID
+const getArticleById = async (req, res) => {
+    try {
+        const article = await Article.findById(req.params.id)
+            .populate('author', 'name email');
+
+        if (!article) {
+            return res.status(404).json({ message: 'Article not found' });
+        }
+
+        res.status(200).json(article);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
-}
+};
 
-const createArticle = (req, res) => {
-    const {title, author} = req.body;
-    if (!title || !author){
-        return res.status(400).json({error:"Title and author are required"});
+// 4. Update an existing article (PUT /api/articles/:id)
+const updateArticle = async (req, res) => {
+    try {
+        const article = await Article.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true, runValidators: true } // Return updated doc and execute validations
+        );
+
+        if (!article) {
+            return res.status(404).json({
+                message: 'Article not found for update'
+            });
+        }
+
+        const populated = await article.populate('author', 'name email');
+
+        res.status(200).json(populated);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
-    const newArticle = {id: nextId, title, author};
-    nextId = nextId + 1;
-    articles.push(newArticle);
-    res.status(201).json({message:"Article created successfully", article:newArticle});
-}
+};
 
-const updateArticle = (req, res) => {
-    const id = Number(req.params.id);
-    const {title, author} = req.body;
+// 5. Delete an article (DELETE /api/articles/:id)
+const deleteArticle = async (req, res) => {
+    try {
+        const article = await Article.findByIdAndDelete(req.params.id);
 
-    const index = articles.findIndex((article) => article.id === id);
-    if (index === -1)
-        return res.status(404).json({message:`Article with id ${id} not found`});
+        if (!article) {
+            return res.status(404).json({
+                message: 'Article not found for deletion'
+            });
+        }
 
-    if (title) articles[index].title = title;
-    if (author) articles[index].author = author;
-
-    res.status(200).json({message:"Article updated successfully", article:articles[index]});
-}
-
-const deleteArticle = (req, res) => {
-    const id = Number(req.params.id);
-    const articlesExiste = articles.some(a => a.id === id);
-    if (!articlesExiste) {
-        return res.status(404).json({error:`Impossible de supprimer : article ${id} introuvable`});
+        res.status(200).json({
+            message: 'Article deleted successfully',
+            id: req.params.id
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
-    const index = articles.findIndex(a => a.id === id);
-    articles.splice(index, 1);
-    res.status(200).json({message:`Article with id ${id} deleted successfully`});
 };
 
 module.exports = {
-    getAllarticles,
-    getArticleById,
+    getAllArticles,
     createArticle,
+    getArticleById,
     updateArticle,
     deleteArticle
 };
