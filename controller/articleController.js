@@ -1,5 +1,5 @@
 const Article = require('../models/articleModel');
-const User = require('../models/userModel');
+const User = require('../models/userModels');
 
 // 1. Retrieve all articles populated with author information
 const getAllArticles = async (req, res) => {

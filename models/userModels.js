@@ -14,7 +14,7 @@ const userSchema = new mongoose.Schema (
         unique: true,
         lowercase :true,
         trim:true,
-        match: [/^[^\s@ ]+@ [^\s@]+\.[^\s@]+$/,'Invalid email format (e.g. , aya@polytechnique.tn)']
+        match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/,'Invalid email format (e.g.,aya@polytechnique.tn)']
 
     },
     age :{
@@ -28,6 +28,14 @@ const userSchema = new mongoose.Schema (
             messages:'{Values} is not an autorized role'
         },
         default :'user'
+    },
+    bio :{
+        type :String,
+        maxlength :[200, 'Bio cannot exceed 200 characters']
+    },
+    phone:{
+        type:String,
+        match:[/^\d{8}$/,'8-digit phone number required'],
     }
 },
     {timestamps :true}
