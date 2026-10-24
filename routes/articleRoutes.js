@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const articleController = require('../controller/articleController');
+const {getAllArticles,getArticleById,createArticle,updateArticle,deleteArticle}= require('../controller/articleController');
+const {protect} = require('../Middlaweres/authMiddleware');
 
-
-router.get('/', articleController.getAllArticles);
-router.get('/:id', articleController.getArticleById);
-router.post('/', articleController.createArticle);
-router.put('/:id', articleController.updateArticle);
-router.delete('/:id', articleController.deleteArticle);
+//public read routes 
+router.get('/',getAllArticles);
+router.get('/',getArticleById);
+router.post('/',protect, createArticle);
+router.put('/:id',protect, updateArticle);
+router.delete('/:id',protect, deleteArticle);
 
 module.exports = router;

@@ -1,66 +1,194 @@
+const bcrypt = require('bcryptjs');
+const jwt =require('jsonwebtoken');
 const User = require('../models/userModels');
- //Create a new user
 
- const createUser = async(req,res)=>{
-    try{
-        const {name,email,age,role,bio,phone}=req.body;
-        if(!name||!email){
-            return res.status(400).json({message:'Name and email are required'});
+// Generate JWT token
+const generateToken = (id, role) => {
+    return jwt.sign(
+        { id, role },
+        process.env.JWT_SECRET,
+        {
+            expiresIn: '1d'
         }
-        //check duplicate
-        const exists = await User.findOne({email});
-        if (exists){
-            return res.status(409).json({message:'Email already in use'});
-        }
-        const user =await User.create({name,email,age,role,bio,phone});
-        res.status(200).json(user);
-    } catch(err){
-        res.status(500).json({message:err.message});
-    };
+    );
 };
-//Get all user
-const getUsers = async(req,res)=>{
+
+// POST /api/users/register (Registration)
+const registerUser = async (req, res) => {
     try {
-        const users =await User.find();
+        const { name, email, password, age, role } = req.body;
+
+        if (!name || !email || !password) {
+            return res.status(400).json({
+                message: 'Name, email, and password are required'
+            });
+        }
+
+        const userExists = await User.findOne({ email });
+
+        if (userExists) {
+            return res.status(409).json({
+                message: 'Email is already registered'
+            });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const user = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            age,
+            role
+        });
+
+        res.status(201).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            token: generateToken(user._id, user.role)
+        });
+    } catch (err) {
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({
+                message: err.message
+            });
+        }
+
+        res.status(500).json({
+            message: err.message
+        });
+    }
+};
+
+// POST /api/users/login (Authentication)
+const loginUser = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({
+                message: 'Email and password are required'
+            });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
+        }
+
+        res.status(200).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            token: generateToken(user._id, user.role)
+        });
+    } catch (err) {
+        res.status(500).json({
+            message: err.message
+        });
+    }
+};
+// PUT /api/users/update-password (Protected password update)
+const updatePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                message: 'Current password and new password are required'
+            });
+        }
+
+        // Find the authenticated user
+        const user = await User.findById(req.user._id);
+
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found'
+            });
+        }
+
+        // Verify the current password
+        const isMatch = await bcrypt.compare(
+            currentPassword,
+            user.password
+        );
+
+        if (!isMatch) {
+            return res.status(401).json({
+                message: 'Current password is incorrect'
+            });
+        }
+
+        // Hash the new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        // Update and save the new password
+        user.password = hashedPassword;
+        await user.save();
+
+        return res.status(200).json({
+            message: 'Password updated successfully'
+        });
+    } catch (err) {
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({
+                message: err.message
+            });
+        }
+
+        return res.status(500).json({
+            message: err.message
+        });
+    }
+};
+
+
+// GET /api/users/profile (Protected profile)
+const getUserProfile = async (req, res) => {
+    try {
+        res.status(200).json(req.user);
+    } catch (err) {
+        res.status(500).json({
+            message: err.message
+        });
+    }
+};
+
+// GET /api/users (Admin only)
+const getAllUsers = async (req, res) => {
+    try {
+        const users = await User.find().select('-password');
+
         res.status(200).json(users);
-
-    }catch(err){
-        res.status(500).json({message : err.message})
+    } catch (err) {
+        res.status(500).json({
+            message: err.message
+        });
     }
 };
-  
 
 
-//get byid 
-const getUsersById= async(req,res)=>{
-    try{
-        const user=await User.findById(req.params.id);
-        if (!user){
-            return res.status(404).json(user)
-        }
-        res.status(200).json(user);
-    }catch(err){
-        if (err.name==='CastError'){
-            return res.status(400).json({message:'Invalid resource identifier (ObjectId expected)'})
-        }
-        res.status(500).json({message: err.message});
-    }
+module.exports = {
+    registerUser,
+    loginUser,
+    getUserProfile,
+    getAllUsers,
+    updatePassword
 };
-const DeleteUser =async(req,res)=>{
-    try{
-        const user =await User.findByIdAndDelete(req.params.id);
-        if (!user){
-            return res.status(400).json ({message : 'User not found for deletion'});
-        }
-        res.status(200).json({message :'User deleted',id: req.params.id});
-    }catch(err){
-        if (err.name==='CastError'){
-            return res.status(400).json({message:'Invalid resource identifier (ObjectId expected)'});
-        }
-        res.status(500).json({mesage:err.mesage});
-    
-    }
-
-};
-module.exports ={createUser,getUsers,getUsersById,DeleteUser};
-
